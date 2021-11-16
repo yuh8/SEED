@@ -1,16 +1,12 @@
-from copy import deepcopy
-import imp
 import numpy as np
 import pandas as pd
 from rdkit import Chem
-from scipy.special import softmax
+from copy import deepcopy
 from src.base_model_utils import loss_func, get_metrics, get_optimizer, SeedGenerator
-from src.data_process_utils import (get_action_mask_from_state,
-                                    get_last_col_with_atom, draw_smiles,
-                                    get_initial_act_vec, graph_to_smiles)
+from src.data_process_utils import (get_last_col_with_atom, draw_smiles, graph_to_smiles)
 from src.reward_utils import (get_logp_reward, get_sa_reward,
                               get_qed_reward, get_cycle_reward)
-from src.misc_utils import create_folder, load_json_model
+from src.misc_utils import create_folder, load_json_model, sample_action
 from src.CONSTS import (BOND_NAMES, MAX_NUM_ATOMS,
                         MIN_NUM_ATOMS, FEATURE_DEPTH,
                         ATOM_MAX_VALENCE,
@@ -24,16 +20,6 @@ def check_validity(mol):
         return True
     except ValueError:
         return False
-
-
-def sample_action(action_logits, state, T=1):
-    action_mask = get_action_mask_from_state(state)
-    action_logits = np.where(action_mask, -1e9, action_logits)
-    action_probs = softmax(action_logits / T)
-    act_vec = get_initial_act_vec()
-    action_size = act_vec.shape[0]
-    action_idx = np.random.choice(action_size, p=action_probs)
-    return action_idx
 
 
 def update_state_with_action(action_logits, state, num_atoms):
@@ -211,10 +197,10 @@ if __name__ == "__main__":
 
         gen_sample["Smiles"] = smi
         gen_sample["NumAtoms"] = num_atoms
-        gen_sample['logp'] = get_logp_reward(smi)
-        gen_sample['sa'] = get_sa_reward(smi)
+        gen_sample['logp'] = np.round(get_logp_reward(smi), 4)
+        gen_sample['sa'] = np.round(get_sa_reward(smi), 4)
         gen_sample['cycle'] = get_cycle_reward(smi)
-        gen_sample['qed'] = get_qed_reward(smi)
+        gen_sample['qed'] = np.round(get_qed_reward(smi), 4)
         gen_samples_df.append(gen_sample)
         count += 1
         print("validation rate = {}".format(np.round(count / (idx + 1), 3)))

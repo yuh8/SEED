@@ -5,7 +5,7 @@ from .data_process_utils import graph_to_smiles
 from .reward_utils import (get_penalized_logp_reward,
                            get_qed_reward,
                            get_diversity_reward)
-from .CONSTS import (BOND_NAMES,
+from .CONSTS import (MIN_NUM_ATOMS, QED_WEIGHT, BOND_NAMES,
                      MAX_NUM_ATOMS,
                      FEATURE_DEPTH,
                      ATOM_MAX_VALENCE,
@@ -60,6 +60,7 @@ def update_state_with_action(action_idx, state, num_atoms):
         else:
             state_new[col, col, :-1] = feature_vec
             state_new[col, col, -1] = ATOM_MAX_VALENCE[atom_idx]
+        reward = 0
     else:
         row = (action_idx - num_act_charge_actions) // len(BOND_NAMES)
         bond_idx = (action_idx - num_act_charge_actions) % len(BOND_NAMES)
@@ -75,11 +76,15 @@ def update_state_with_action(action_idx, state, num_atoms):
         state_new[col, col, -1] -= bond_idx
         mol = graph_to_smiles(state_new[:, :, :-1], return_mol=True)
         valid = check_validity(mol)
-        if not valid:
-            # if bond creation is not valid, add small penalty
-            return state, is_terminate, -1
 
-    return state, is_terminate, 0
+        if not valid:
+            print('invalild bond creation, terminated')
+            is_terminate = True
+            # if bond creation is not valid, add small penalty
+            return state_new, is_terminate, -1
+        reward = 0
+
+    return state_new, is_terminate, reward
 
 
 class Env:
@@ -89,18 +94,26 @@ class Env:
         self.mode = mode
 
     def step(self, action_idx):
-        state, done, inter_reward = update_state_with_action(action_idx, self.state, self.num_atoms)
+        self.state, done, inter_reward = update_state_with_action(action_idx, self.state, self.num_atoms)
         if not done:
-            return state, done, inter_reward
+            return self.state, done, inter_reward
 
-        smi = graph_to_smiles(state[:, :, :-1])
+        smi = graph_to_smiles(self.state[:, :, :-1])
+
         if self.mode == "QED":
-            final_r = 5 * get_qed_reward(smi)
+            final_r = QED_WEIGHT * get_qed_reward(smi)
         else:
             final_r = np.exp(get_penalized_logp_reward(smi) / 4)
 
-        final_r += inter_reward + get_diversity_reward(smi)
-        return state, done, final_r
+        col = get_last_col_with_atom(self.state)
+
+        if col <= MIN_NUM_ATOMS:
+            final_r = -1
+
+        # normalize reward between -1 and 1
+        final_r += inter_reward  # + get_diversity_reward(smi)
+        # final_r /= (QED_WEIGHT + 1)
+        return self.state, done, final_r
 
     def reset(self):
         self.state = np.zeros((MAX_NUM_ATOMS, MAX_NUM_ATOMS, FEATURE_DEPTH + 1))

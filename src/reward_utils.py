@@ -1,5 +1,6 @@
 import pandas as pd
 import networkx as nx
+import scipy.signal
 from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.Chem import AllChem
@@ -16,7 +17,7 @@ def external_diversity(smi_new, smi_bank):
     mol_new = Chem.MolFromSmiles(smi_new)
     fps_new = AllChem.GetMorganFingerprint(mol_new, 6)
     fps_B = []
-    for smi in enumerate(smi_bank):
+    for smi in smi_bank:
         try:
             smi = canonicalize_smile(smi)
             mol = Chem.MolFromSmiles(smi)
@@ -70,7 +71,7 @@ def get_qed_reward(smi):
 
 
 def get_diversity_reward(smi):
-    smi_bank = pd.read_csv('../data/smiles_base.csv').Smiles.values
+    smi_bank = pd.read_csv('data/smiles_base.csv').Smiles.values
     diversity = external_diversity(smi, smi_bank)
     if diversity > 0.9:
         return 1
@@ -79,7 +80,7 @@ def get_diversity_reward(smi):
 
 
 def get_penalized_logp_reward(smi):
-    smi_base = pd.read_csv('../data/smiles_base.csv')
+    smi_base = pd.read_csv('data/smiles_base.csv')
     logP_mean = smi_base.logp.mean()
     logP_std = smi_base.logp.std()
     SA_mean = smi_base.sa.mean()
@@ -101,3 +102,8 @@ def get_penalized_logp_reward(smi):
     normalized_cycle = (cycle - cycle_mean) / cycle_std
 
     return normalized_log_p + normalized_SA + normalized_cycle
+
+
+def discounted_cumulative_sums(x, discount):
+    # Discounted cumulative sums of vectors for computing rewards-to-go and advantage estimates
+    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]

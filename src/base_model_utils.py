@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from .embed_utils import conv2d_block, res_block
+from .misc_utils import load_json_model
 from .CONSTS import (ATOM_LIST, CHARGES, BOND_NAMES,
                      MAX_NUM_ATOMS, FEATURE_DEPTH,
                      NUM_FILTERS, FILTER_SIZE, NUM_RES_BLOCKS)
@@ -119,3 +120,29 @@ class SeedGenerator(keras.Model):
         # clear metrics after every epoch
         return [self.train_act_acc, self.val_act_acc,
                 self.train_loss, self.val_loss]
+
+
+def load_base_model():
+    base_model = load_json_model("base_model/generator_model.json", SeedGenerator, "SeedGenerator")
+    base_model.compile(optimizer=get_optimizer(),
+                       loss_fn=loss_func,
+                       metric_fn=get_metrics)
+    base_model.load_weights("./base_model/weights/")
+    return base_model
+
+
+def get_critic_model():
+    base_model = load_base_model()
+    out = base_model.layers[-1].output
+    # add another prediction layer
+    out = layers.Dense(32, name='critic_feature')(out)
+    value = layers.Dense(1, activation=None, name='critic_value')(out)
+    critic = keras.Model(inputs=base_model.input, outputs=value)
+    return critic
+
+
+def get_actor_model():
+    base_model = load_base_model()
+    out = base_model.layers[-1].output
+    actor = keras.Model(inputs=base_model.input, outputs=out)
+    return actor
