@@ -60,7 +60,7 @@ def update_state_with_action(action_idx, state, num_atoms):
         else:
             state_new[col, col, :-1] = feature_vec
             state_new[col, col, -1] = ATOM_MAX_VALENCE[atom_idx]
-        reward = 0
+        reward = 0.5
     else:
         row = (action_idx - num_act_charge_actions) // len(BOND_NAMES)
         bond_idx = (action_idx - num_act_charge_actions) % len(BOND_NAMES)
@@ -82,7 +82,7 @@ def update_state_with_action(action_idx, state, num_atoms):
             is_terminate = True
             # if bond creation is not valid, add small penalty
             return state_new, is_terminate, -1
-        reward = 0
+        reward = 1
 
     return state_new, is_terminate, reward
 
@@ -109,6 +109,8 @@ class Env:
 
         if col <= MIN_NUM_ATOMS:
             final_r = -1
+
+        print("QED is {}".format(get_qed_reward(smi)))
 
         # normalize reward between -1 and 1
         final_r += inter_reward  # + get_diversity_reward(smi)
