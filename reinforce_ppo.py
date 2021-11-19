@@ -13,10 +13,10 @@ steps_per_epoch = 1024
 epochs = 200
 gamma = 0.99
 clip_ratio = 0.2
-policy_learning_rate = 3e-4
-value_function_learning_rate = 1e-4
-train_policy_iterations = 32
-train_value_iterations = 32
+policy_learning_rate = 1e-4
+value_function_learning_rate = 1e-5
+train_policy_iterations = 80
+train_value_iterations = 80
 lam = 0.97
 target_kl = 0.01
 
@@ -59,7 +59,7 @@ def train_policy(observation_buffer,
 
     with tf.GradientTape() as tape:
         ratio = tf.exp(
-            logprobabilities(actor(observation_buffer), action_buffer)
+            logprobabilities(actor(observation_buffer, training=True), action_buffer)
             - logprobability_buffer
         )
         min_advantage = tf.where(
@@ -86,7 +86,7 @@ def train_policy(observation_buffer,
 @tf.function
 def train_value_function(observation_buffer, return_buffer):
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
-        value_loss = tf.reduce_mean((return_buffer - critic(observation_buffer)) ** 2)
+        value_loss = tf.reduce_mean((return_buffer - critic(observation_buffer, training=True)) ** 2)
     value_grads = tape.gradient(value_loss, critic.trainable_variables)
     value_optimizer.apply_gradients(zip(value_grads, critic.trainable_variables))
     return value_loss
@@ -108,8 +108,8 @@ for epoch in range(epochs):
     # Iterate over the steps of each epoch
     for t in range(steps_per_epoch):
         # Get the logits, action, and take one step in the environment
-        logits = actor(state[np.newaxis, ...])
-        value_t = critic(state[np.newaxis, ...])
+        logits = actor(state[np.newaxis, ...], training=False)
+        value_t = critic(state[np.newaxis, ...], training=False)
         action = sample_action(logits[0].numpy(), state)
         state_new, done, reward = env.step(action)
         episode_return += reward
@@ -127,7 +127,7 @@ for epoch in range(epochs):
         # Finish trajectory if reached to a terminal state
         terminal = done
         if terminal or (t == steps_per_epoch - 1):
-            last_value = 0 if done else critic(state[np.newaxis, ...])
+            last_value = 0 if done else critic(state[np.newaxis, ...], training=False)
             buffer.finish_trajectory(last_value)
             sum_return += episode_return
             sum_length += episode_length
@@ -174,7 +174,7 @@ for epoch in range(epochs):
         for batch in train_batch_idx:
             ll = train_value_function(observation_buffer[batch, ...],
                                       return_buffer[batch])
-    print("value fitting loss = {}".format(ll))
+            print("value fitting loss = {}".format(ll))
 
     # Print mean return and length for each epoch
     print(

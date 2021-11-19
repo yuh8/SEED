@@ -135,7 +135,7 @@ def get_critic_model():
     base_model = load_base_model()
     out = base_model.layers[-1].output
     # add another prediction layer
-    out = layers.Dense(32, name='critic_feature')(out)
+    out = layers.Dense(32, activation='relu', name='critic_feature')(out)
     value = layers.Dense(1, activation=None, name='critic_value')(out)
     critic = keras.Model(inputs=base_model.input, outputs=value)
     return critic

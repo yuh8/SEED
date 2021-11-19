@@ -33,30 +33,23 @@ class Buffer:
         path_slice = slice(self.trajectory_start_index, self.pointer)
         rewards = np.append(self.reward_buffer[path_slice], last_value)
         values = np.append(self.value_buffer[path_slice], last_value)
-
         deltas = rewards[:-1] + self.gamma * values[1:] - values[:-1]
 
-        self.advantage_buffer[path_slice] = discounted_cumulative_sums(
-            deltas, self.gamma * self.lam
-        )
-        self.return_buffer[path_slice] = discounted_cumulative_sums(
-            rewards, self.gamma
-        )[:-1]
+        self.advantage_buffer[path_slice] = \
+            discounted_cumulative_sums(deltas, self.gamma * self.lam)
 
+        self.return_buffer[path_slice] = \
+            discounted_cumulative_sums(rewards, self.gamma)[:-1]
         self.trajectory_start_index = self.pointer
 
     def get(self):
         # Get all data of the buffer and normalize the advantages
         self.pointer, self.trajectory_start_index = 0, 0
-        advantage_mean, advantage_std = (
-            np.mean(self.advantage_buffer),
-            np.std(self.advantage_buffer),
-        )
+        advantage_mean, advantage_std = (np.mean(self.advantage_buffer),
+                                         np.std(self.advantage_buffer))
         self.advantage_buffer = (self.advantage_buffer - advantage_mean) / advantage_std
-        return (
-            self.observation_buffer,
-            self.action_buffer,
-            self.advantage_buffer,
-            self.return_buffer,
-            self.logprobability_buffer,
-        )
+        return (self.observation_buffer,
+                self.action_buffer,
+                self.advantage_buffer,
+                self.return_buffer,
+                self.logprobability_buffer)

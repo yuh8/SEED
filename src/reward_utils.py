@@ -66,7 +66,7 @@ def get_qed_reward(smi):
         smi = canonicalize_smile(smi)
         mol = Chem.MolFromSmiles(smi)
     except:
-        return -1
+        return 0
     return qed(mol)
 
 

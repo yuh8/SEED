@@ -48,7 +48,7 @@ class Buffer:
         values = np.append(self.value_buffer[path_slice], last_value)
 
         deltas = rewards[:-1] + self.gamma * values[1:] - values[:-1]
-
+        breakpoint()
         self.advantage_buffer[path_slice] = discounted_cumulative_sums(
             deltas, self.gamma * self.lam
         )
@@ -137,6 +137,7 @@ def train_value_function(observation_buffer, return_buffer):
         value_loss = tf.reduce_mean((return_buffer - critic(observation_buffer)) ** 2)
     value_grads = tape.gradient(value_loss, critic.trainable_variables)
     value_optimizer.apply_gradients(zip(value_grads, critic.trainable_variables))
+    return value_loss
 
 
 """
@@ -150,8 +151,8 @@ gamma = 0.99
 clip_ratio = 0.2
 policy_learning_rate = 3e-4
 value_function_learning_rate = 1e-3
-train_policy_iterations = 32
-train_value_iterations = 32
+train_policy_iterations = 80
+train_value_iterations = 80
 lam = 0.97
 target_kl = 0.01
 hidden_sizes = (64, 64)
@@ -174,10 +175,10 @@ buffer = Buffer(observation_dimensions, steps_per_epoch)
 
 # Initialize the actor and the critic as keras models
 observation_input = keras.Input(shape=(observation_dimensions,), dtype=tf.float32)
-logits = mlp(observation_input, list(hidden_sizes) + [num_actions], tf.tanh, None)
+logits = mlp(observation_input, list(hidden_sizes) + [num_actions], None, None)
 actor = keras.Model(inputs=observation_input, outputs=logits)
 value = tf.squeeze(
-    mlp(observation_input, list(hidden_sizes) + [1], tf.tanh, None), axis=1
+    mlp(observation_input, list(hidden_sizes) + [1], None, None), axis=1
 )
 critic = keras.Model(inputs=observation_input, outputs=value)
 
@@ -238,7 +239,7 @@ for epoch in range(epochs):
         return_buffer,
         logprobability_buffer,
     ) = buffer.get()
-
+    breakpoint()
     # Update the policy and implement early stopping using KL divergence
     for _ in range(train_policy_iterations):
         kl = train_policy(
@@ -250,7 +251,8 @@ for epoch in range(epochs):
 
     # Update the value function
     for _ in range(train_value_iterations):
-        train_value_function(observation_buffer, return_buffer)
+        ll = train_value_function(observation_buffer, return_buffer)
+        print('value loss = {}'.format(ll))
 
     # Print mean return and length for each epoch
     print(
