@@ -3,8 +3,7 @@ from rdkit import Chem
 from copy import deepcopy
 from .data_process_utils import graph_to_smiles
 from .reward_utils import (get_penalized_logp_reward,
-                           get_qed_reward,
-                           get_diversity_reward)
+                           get_qed_reward)
 from .CONSTS import (MIN_NUM_ATOMS, QED_WEIGHT, BOND_NAMES,
                      MAX_NUM_ATOMS,
                      FEATURE_DEPTH,
