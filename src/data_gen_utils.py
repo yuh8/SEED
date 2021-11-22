@@ -38,6 +38,7 @@ class Buffer:
         self.advantage_buffer[path_slice] = \
             discounted_cumulative_sums(deltas, self.gamma * self.lam)
 
+        # self.advantage_buffer[path_slice] = deltas
         self.return_buffer[path_slice] = \
             discounted_cumulative_sums(rewards, self.gamma)[:-1]
         self.trajectory_start_index = self.pointer

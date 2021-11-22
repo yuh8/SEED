@@ -141,7 +141,7 @@ def generate_smiles(model, gen_idx):
     smi_graph = state[..., :-1]
     smi = graph_to_smiles(smi_graph)
     smi = _canonicalize_smiles(smi)
-    draw_smiles(smi, "gen_samples/gen_sample_{}".format(gen_idx))
+    draw_smiles(smi, "gen_samples_rl/gen_sample_{}".format(gen_idx))
     return smi, num_atoms
 
 
@@ -179,12 +179,10 @@ def compute_novelty_score():
 
 
 if __name__ == "__main__":
-    create_folder('gen_samples/')
-    model = load_json_model("base_model/generator_model.json", SeedGenerator, "SeedGenerator")
-    model.compile(optimizer=get_optimizer(),
-                  loss_fn=loss_func,
-                  metric_fn=get_metrics)
-    model.load_weights("./base_model/weights/")
+    create_folder('gen_samples_rl/')
+    model = load_json_model("rl_model/rl_model.json", SeedGenerator, "SeedGenerator")
+    model.compile(optimizer='Adam')
+    model.load_weights("./rl_model/weights/generator")
     gen_samples_df = []
     count = 0
     for idx in range(10000):
@@ -206,7 +204,7 @@ if __name__ == "__main__":
         print("validation rate = {}".format(np.round(count / (idx + 1), 3)))
 
     gen_samples_df = pd.DataFrame(gen_samples_df)
-    gen_samples_df.to_csv('generated_molecules.csv', index=False)
+    gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
     # compute_unique_score()
     # compute_novelty_score()
     breakpoint()

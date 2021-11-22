@@ -59,7 +59,7 @@ def update_state_with_action(action_idx, state, num_atoms):
         else:
             state_new[col, col, :-1] = feature_vec
             state_new[col, col, -1] = ATOM_MAX_VALENCE[atom_idx]
-        reward = 0.5
+        reward = 0
     else:
         row = (action_idx - num_act_charge_actions) // len(BOND_NAMES)
         bond_idx = (action_idx - num_act_charge_actions) % len(BOND_NAMES)
@@ -80,7 +80,7 @@ def update_state_with_action(action_idx, state, num_atoms):
             is_terminate = True
             # if bond creation is not valid, add small penalty
             return state_new, is_terminate, -1
-        reward = 1
+        reward = 0
 
     return state_new, is_terminate, reward
 

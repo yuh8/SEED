@@ -47,6 +47,14 @@ def logprobabilities(logits, a):
     return logprobability
 
 
+def get_entropy(logits):
+    logprobabilities_all = tf.nn.log_softmax(logits)
+    enty = -tf.reduce_sum(
+        tf.exp(logprobabilities_all) * logprobabilities_all, axis=1
+    )
+    return enty
+
+
 def sample_action(action_logits, state, T=1):
     action_mask = get_action_mask_from_state(state)
     action_logits = np.where(action_mask, -1e9, action_logits)

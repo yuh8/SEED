@@ -5,20 +5,22 @@ from tensorflow import keras
 from src.env_utils import Env
 from src.data_gen_utils import Buffer
 from src.base_model_utils import get_actor_model, get_critic_model
-from src.misc_utils import logprobabilities, sample_action
+from src.misc_utils import (logprobabilities, get_entropy,
+                            sample_action, save_model_to_json, create_folder)
 from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
 
 # hyperparameters of PPO
-steps_per_epoch = 1024
-epochs = 200
+steps_per_epoch = 8192
+epochs = 500
 gamma = 0.99
 clip_ratio = 0.2
-policy_learning_rate = 1e-4
-value_function_learning_rate = 1e-5
-train_policy_iterations = 80
-train_value_iterations = 80
+policy_learning_rate = 3e-4
+value_function_learning_rate = 1e-3
+train_policy_iterations = 2
+train_value_iterations = 2
 lam = 0.97
 target_kl = 0.01
+entropy_weight = 0.1
 
 
 # Initialize the buffer
@@ -27,6 +29,8 @@ buffer = Buffer(steps_per_epoch)
 # Initialize the actor and the critic as keras models
 actor = get_actor_model()
 critic = get_critic_model()
+create_folder("rl_model")
+save_model_to_json(actor, "rl_model/rl_model.json")
 
 # Initialize the policy and the value function optimizers
 policy_optimizer = keras.optimizers.Adam(learning_rate=policy_learning_rate)
@@ -70,6 +74,7 @@ def train_policy(observation_buffer,
 
         policy_loss = -tf.reduce_mean(
             tf.minimum(ratio * advantage_buffer, min_advantage)
+            + entropy_weight * get_entropy(actor(observation_buffer, training=True))
         )
     policy_grads = tape.gradient(policy_loss, actor.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor.trainable_variables))
@@ -98,6 +103,7 @@ episode_length = 0
 num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
 env = Env(num_atoms)
 state = env.reset()
+max_mean_return = -np.inf
 for epoch in range(epochs):
     # Initialize the sum of the returns, lengths and number of episodes for each epoch
     sum_return = 0
@@ -174,9 +180,12 @@ for epoch in range(epochs):
         for batch in train_batch_idx:
             ll = train_value_function(observation_buffer[batch, ...],
                                       return_buffer[batch])
-            print("value fitting loss = {}".format(ll))
+            # print("value fitting loss = {}".format(ll))
 
     # Print mean return and length for each epoch
+    mean_return = np.round(sum_return / num_episodes, 3)
     print(
         f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
     )
+    if mean_return > max_mean_return:
+        actor.save_weights("./rl_generator_weights/generator")
