@@ -182,7 +182,7 @@ if __name__ == "__main__":
     create_folder('gen_samples_rl/')
     model = load_json_model("rl_model/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model/weights/generator")
+    model.load_weights("./rl_model/weights/")
     gen_samples_df = []
     count = 0
     for idx in range(10000):

@@ -63,12 +63,9 @@ def loss_func(y_true, y_pred):
     return loss
 
 
-def get_optimizer(finetune=False):
-    lr = 0.001
-    if finetune:
-        lr = 0.00001
+def get_optimizer(lr):
     lr_fn = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-        [200000, 400000, 600000], [lr, lr / 10, lr / 50, lr / 100],
+        [20000, 40000, 60000], [lr, lr / 2, lr / 4, lr / 8],
         name=None
     )
     opt_op = tf.keras.optimizers.Adam(learning_rate=lr_fn)
@@ -124,10 +121,7 @@ class SeedGenerator(keras.Model):
 
 def load_base_model():
     base_model = load_json_model("base_model/generator_model.json", SeedGenerator, "SeedGenerator")
-    base_model.compile(optimizer=get_optimizer(),
-                       loss_fn=loss_func,
-                       metric_fn=get_metrics)
-    base_model.load_weights("./base_model/weights/")
+    base_model.load_weights("./base_model/weights/").expect_partial()
     return base_model
 
 

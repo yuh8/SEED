@@ -1,20 +1,22 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 from src.env_utils import Env
 from src.data_gen_utils import Buffer
-from src.base_model_utils import get_actor_model, get_critic_model
+from src.base_model_utils import (get_actor_model,
+                                  get_critic_model,
+                                  get_optimizer)
 from src.misc_utils import (logprobabilities, get_entropy,
-                            sample_action, save_model_to_json, create_folder)
+                            sample_action, save_model_to_json,
+                            create_folder)
 from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
 
 # hyperparameters of PPO
-steps_per_epoch = 2**14
+steps_per_epoch = 20480
 epochs = 500
 gamma = 0.99
 clip_ratio = 0.2
 policy_learning_rate = 1e-4
-value_function_learning_rate = 1e-4
+value_learning_rate = 1e-4
 train_policy_iterations = 2
 train_value_iterations = 2
 lam = 0.97
@@ -32,8 +34,13 @@ create_folder("rl_model")
 save_model_to_json(actor, "rl_model/rl_model.json")
 
 # Initialize the policy and the value function optimizers
-policy_optimizer = keras.optimizers.Adam(learning_rate=policy_learning_rate)
-value_optimizer = keras.optimizers.Adam(learning_rate=value_function_learning_rate)
+policy_optimizer = get_optimizer(policy_learning_rate)
+value_optimizer = get_optimizer(value_learning_rate)
+
+# logs
+train_log_dir = 'logs/'
+writer = tf.summary.create_file_writer(train_log_dir)
+tf.summary.trace_on(graph=True, profiler=False)
 
 
 @tf.function
@@ -85,13 +92,13 @@ def train_policy(observation_buffer,
         - logprobabilities(actor(observation_buffer), action_buffer)
     )
     kl = tf.reduce_sum(kl)
-    return kl
+    return policy_loss, kl
 
 
 # Train the value function by regression on mean-squared error
 @tf.function
 def train_value_function(observation_buffer, value_buffer, return_buffer):
-    with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
+    with tf.GradientTape() as tape:
         vpred = critic(observation_buffer, training=True)
         vpredclipped = value_buffer + tf.clip_by_value(vpred - value_buffer, -clip_ratio, clip_ratio)
         # Unclipped value
@@ -105,97 +112,105 @@ def train_value_function(observation_buffer, value_buffer, return_buffer):
     return value_loss
 
 
-# Iterate over the number of epochs
+# Training starts here
 episode_return = 0
 episode_length = 0
 num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
 env = Env(num_atoms)
 state = env.reset()
 max_mean_return = -np.inf
-for epoch in range(epochs):
-    # Initialize the sum of the returns, lengths and number of episodes for each epoch
-    sum_return = 0
-    sum_length = 0
-    num_episodes = 0
+policy_train_step = 0
 
-    max_episode_len = -np.inf
-    # Iterate over the steps of each epoch
-    for t in range(steps_per_epoch):
-        # Get the logits, action, and take one step in the environment
-        logits = actor(state[np.newaxis, ...], training=False)
-        value_t = critic(state[np.newaxis, ...], training=False)
-        action = sample_action(logits[0].numpy(), state)
-        state_new, done, reward = env.step(action)
-        episode_return += reward
-        episode_length += 1
+with writer.as_default():
+    for epoch in range(epochs):
+        sum_return = 0
+        sum_length = 0
+        num_episodes = 0
 
-        # Get the value and log-probability of the action
-        logprobability_t = logprobabilities(logits, action)
+        max_episode_len = -np.inf
+        for t in range(steps_per_epoch):
+            # Get the logits, action, and take one step in the environment
+            logits = actor(state[np.newaxis, ...], training=False)
+            value_t = critic(state[np.newaxis, ...], training=False)
+            action = sample_action(logits[0].numpy(), state)
+            state_new, done, reward = env.step(action)
+            episode_return += reward
+            episode_length += 1
 
-        # Store obs, act, rew, v_t, logp_pi_t
-        buffer.store(state, action, reward, value_t, logprobability_t)
+            # Get the value and log-probability of the action
+            logprobability_t = logprobabilities(logits, action)
 
-        # Update the observation
-        state = state_new
+            # Store obs, act, rew, v_t, logp_pi_t
+            buffer.store(state, action, reward, value_t, logprobability_t)
 
-        # Finish trajectory if reached to a terminal state
-        terminal = done
-        if terminal or (t == steps_per_epoch - 1):
-            last_value = 0 if done else critic(state[np.newaxis, ...], training=False)
-            buffer.finish_trajectory(last_value)
-            sum_return += episode_return
-            sum_length += episode_length
-            num_episodes += 1
-            # generate molecules with different length
-            num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
-            env = Env(num_atoms)
-            if episode_length > max_episode_len:
-                max_episode_len = episode_length
-            state, episode_return, episode_length = env.reset(), 0, 0
+            # Update the observation
+            state = state_new
 
-    # Get values from the buffer
-    (
-        observation_buffer,
-        action_buffer,
-        value_buffer,
-        advantage_buffer,
-        return_buffer,
-        logprobability_buffer,
-    ) = buffer.get()
+            # Finish trajectory if reached to a terminal state
+            terminal = done
+            if terminal or (t == steps_per_epoch - 1):
+                last_value = 0 if done else critic(state[np.newaxis, ...], training=False)
+                buffer.finish_trajectory(last_value)
+                sum_return += episode_return
+                sum_length += episode_length
+                num_episodes += 1
+                # Generate molecules with different length
+                num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
+                env = Env(num_atoms)
+                if episode_length > max_episode_len:
+                    max_episode_len = episode_length
+                state, episode_return, episode_length = env.reset(), 0, 0
 
-    # Update the policy and implement early stopping using KL divergence
-    for _ in range(train_policy_iterations):
-        arr = np.arange(steps_per_epoch)
-        np.random.shuffle(arr)
-        num_batches = steps_per_epoch // BATCH_SIZE
-        train_batch_idx = np.array_split(arr, num_batches)
-        for batch in train_batch_idx:
-            kl = train_policy(
-                observation_buffer[batch, ...],
-                action_buffer[batch],
-                logprobability_buffer[batch],
-                advantage_buffer[batch]
-            )
-        if kl > 1.5 * target_kl:
-            # Early Stopping
-            break
+        # Get values from the buffer
+        (
+            observation_buffer,
+            action_buffer,
+            value_buffer,
+            advantage_buffer,
+            return_buffer,
+            logprobability_buffer,
+        ) = buffer.get()
 
-    # Update the value function
-    for _ in range(train_value_iterations):
-        arr = np.arange(steps_per_epoch)
-        np.random.shuffle(arr)
-        num_batches = steps_per_epoch // BATCH_SIZE
-        train_batch_idx = np.array_split(arr, num_batches)
-        for batch in train_batch_idx:
-            ll = train_value_function(observation_buffer[batch, ...],
-                                      value_buffer[batch],
-                                      return_buffer[batch])
-            # print("value fitting loss = {}".format(ll))
+        # Update the policy and implement early stopping using KL divergence
+        for _ in range(train_policy_iterations):
+            arr = np.arange(steps_per_epoch)
+            np.random.shuffle(arr)
+            num_batches = steps_per_epoch // BATCH_SIZE
+            train_batch_idx = np.array_split(arr, num_batches)
+            for batch in train_batch_idx:
+                policy_loss, kl = train_policy(
+                    observation_buffer[batch, ...],
+                    action_buffer[batch],
+                    logprobability_buffer[batch],
+                    advantage_buffer[batch]
+                )
+                if policy_train_step == 0:
+                    tf.summary.trace_export(name="neunicorn", step=policy_train_step)
+                tf.summary.scalar('policy_loss', policy_loss, step=policy_train_step)
+                tf.summary.scalar('kl_divergence', kl, step=policy_train_step)
+                policy_train_step += 1
 
-    # Print mean return and length for each epoch
-    mean_return = np.round(sum_return / num_episodes, 3)
-    print(
-        f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
-    )
-    if mean_return > max_mean_return:
-        actor.save_weights("./rl_model/weights/")
+            if kl > 1.5 * target_kl:
+                # Early Stopping
+                break
+
+        # Update the value function
+        for _ in range(train_value_iterations):
+            arr = np.arange(steps_per_epoch)
+            np.random.shuffle(arr)
+            num_batches = steps_per_epoch // BATCH_SIZE
+            train_batch_idx = np.array_split(arr, num_batches)
+            for batch in train_batch_idx:
+                ll = train_value_function(observation_buffer[batch, ...],
+                                          value_buffer[batch],
+                                          return_buffer[batch])
+
+        # Print mean return and length for each epoch
+        mean_return = np.round(sum_return / num_episodes, 3)
+        tf.summary.scalar('mean_return', mean_return, step=epoch)
+        writer.flush()
+        print(
+            f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
+        )
+        if mean_return > max_mean_return:
+            actor.save_weights("./rl_model/weights/")
