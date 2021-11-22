@@ -51,6 +51,7 @@ class Buffer:
         self.advantage_buffer = (self.advantage_buffer - advantage_mean) / advantage_std
         return (self.observation_buffer,
                 self.action_buffer,
+                self.value_buffer,
                 self.advantage_buffer,
                 self.return_buffer,
                 self.logprobability_buffer)

@@ -1,4 +1,3 @@
-from copy import deepcopy
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -10,17 +9,17 @@ from src.misc_utils import (logprobabilities, get_entropy,
 from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
 
 # hyperparameters of PPO
-steps_per_epoch = 8192
+steps_per_epoch = 2**14
 epochs = 500
 gamma = 0.99
 clip_ratio = 0.2
-policy_learning_rate = 3e-4
-value_function_learning_rate = 1e-3
+policy_learning_rate = 1e-4
+value_function_learning_rate = 1e-4
 train_policy_iterations = 2
 train_value_iterations = 2
 lam = 0.97
 target_kl = 0.01
-entropy_weight = 0.1
+entropy_weight = 0.01
 
 
 # Initialize the buffer
@@ -62,8 +61,9 @@ def train_policy(observation_buffer,
                  advantage_buffer):
 
     with tf.GradientTape() as tape:
+        logits = actor(observation_buffer, training=True)
         ratio = tf.exp(
-            logprobabilities(actor(observation_buffer, training=True), action_buffer)
+            logprobabilities(logits, action_buffer)
             - logprobability_buffer
         )
         min_advantage = tf.where(
@@ -74,9 +74,10 @@ def train_policy(observation_buffer,
 
         policy_loss = -tf.reduce_mean(
             tf.minimum(ratio * advantage_buffer, min_advantage)
-            + entropy_weight * get_entropy(actor(observation_buffer, training=True))
+            + entropy_weight * get_entropy(logits)
         )
     policy_grads = tape.gradient(policy_loss, actor.trainable_variables)
+    policy_grads, _ = tf.clip_by_global_norm(policy_grads, 0.5)
     policy_optimizer.apply_gradients(zip(policy_grads, actor.trainable_variables))
 
     kl = tf.reduce_mean(
@@ -89,10 +90,17 @@ def train_policy(observation_buffer,
 
 # Train the value function by regression on mean-squared error
 @tf.function
-def train_value_function(observation_buffer, return_buffer):
+def train_value_function(observation_buffer, value_buffer, return_buffer):
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
-        value_loss = tf.reduce_mean((return_buffer - critic(observation_buffer, training=True)) ** 2)
+        vpred = critic(observation_buffer, training=True)
+        vpredclipped = value_buffer + tf.clip_by_value(vpred - value_buffer, -clip_ratio, clip_ratio)
+        # Unclipped value
+        vf_losses1 = tf.square(vpred - return_buffer)
+        # Clipped value
+        vf_losses2 = tf.square(vpredclipped - return_buffer)
+        value_loss = tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
     value_grads = tape.gradient(value_loss, critic.trainable_variables)
+    value_grads, _ = tf.clip_by_global_norm(value_grads, 0.5)
     value_optimizer.apply_gradients(zip(value_grads, critic.trainable_variables))
     return value_loss
 
@@ -149,6 +157,7 @@ for epoch in range(epochs):
     (
         observation_buffer,
         action_buffer,
+        value_buffer,
         advantage_buffer,
         return_buffer,
         logprobability_buffer,
@@ -179,6 +188,7 @@ for epoch in range(epochs):
         train_batch_idx = np.array_split(arr, num_batches)
         for batch in train_batch_idx:
             ll = train_value_function(observation_buffer[batch, ...],
+                                      value_buffer[batch],
                                       return_buffer[batch])
             # print("value fitting loss = {}".format(ll))
 
@@ -188,4 +198,4 @@ for epoch in range(epochs):
         f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
     )
     if mean_return > max_mean_return:
-        actor.save_weights("./rl_generator_weights/generator")
+        actor.save_weights("./rl_model/weights/")
