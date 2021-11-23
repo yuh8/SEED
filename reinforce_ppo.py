@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from datetime import date
 from src.env_utils import Env
 from src.data_gen_utils import Buffer
 from src.base_model_utils import (get_actor_model,
@@ -9,6 +10,7 @@ from src.misc_utils import (logprobabilities, get_entropy,
                             sample_action, save_model_to_json,
                             create_folder)
 from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
+today = str(date.today())
 
 # hyperparameters of PPO
 steps_per_epoch = 20480
@@ -38,7 +40,7 @@ policy_optimizer = get_optimizer(policy_learning_rate)
 value_optimizer = get_optimizer(value_learning_rate)
 
 # logs
-train_log_dir = 'logs/'
+train_log_dir = 'logs_{}/'.format(today)
 writer = tf.summary.create_file_writer(train_log_dir)
 tf.summary.trace_on(graph=True, profiler=False)
 
