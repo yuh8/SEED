@@ -78,10 +78,10 @@ def train_policy(observation_buffer,
             (1 + clip_ratio) * advantage_buffer,
             (1 - clip_ratio) * advantage_buffer,
         )
-
+        entropy_value = get_entropy(logits)
         policy_loss = -tf.reduce_mean(
             tf.minimum(ratio * advantage_buffer, min_advantage)
-            + entropy_weight * get_entropy(logits)
+            + entropy_weight * entropy_value
         )
     policy_grads = tape.gradient(policy_loss, actor.trainable_variables)
     policy_grads, _ = tf.clip_by_global_norm(policy_grads, 0.5)
@@ -92,7 +92,7 @@ def train_policy(observation_buffer,
         - logprobabilities(actor(observation_buffer), action_buffer)
     )
     kl = tf.reduce_sum(kl)
-    return policy_loss, kl
+    return policy_loss, kl, entropy_value
 
 
 # Train the value function by regression on mean-squared error
@@ -178,7 +178,7 @@ with writer.as_default():
             num_batches = steps_per_epoch // BATCH_SIZE
             train_batch_idx = np.array_split(arr, num_batches)
             for batch in train_batch_idx:
-                policy_loss, kl = train_policy(
+                policy_loss, kl, entropy_value = train_policy(
                     observation_buffer[batch, ...],
                     action_buffer[batch],
                     logprobability_buffer[batch],
@@ -186,13 +186,17 @@ with writer.as_default():
                 )
                 if policy_train_step == 0:
                     tf.summary.trace_export(name="neunicorn", step=policy_train_step)
+                # This may fluctuate abit
                 tf.summary.scalar('policy_loss', policy_loss, step=policy_train_step)
+                # This should be going up to limit and then come down
                 tf.summary.scalar('kl_divergence', kl, step=policy_train_step)
+                # This should slowly decrease overtime
+                tf.summary.scalar('entropy', entropy_value, step=policy_train_step)
                 policy_train_step += 1
 
-            if kl > 1.5 * target_kl:
-                # Early Stopping
-                break
+                if kl > 1.5 * target_kl:
+                    # Early Stopping
+                    break
 
         # Update the value function
         for _ in range(train_value_iterations):

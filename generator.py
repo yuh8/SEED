@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from rdkit import Chem
 from copy import deepcopy
-from src.base_model_utils import loss_func, get_metrics, get_optimizer, SeedGenerator
+from src.base_model_utils import SeedGenerator
 from src.data_process_utils import (get_last_col_with_atom, draw_smiles, graph_to_smiles)
 from src.reward_utils import (get_logp_reward, get_sa_reward,
                               get_qed_reward, get_cycle_reward)
