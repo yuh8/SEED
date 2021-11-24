@@ -193,12 +193,16 @@ with writer.as_default():
                 # This should be going up to limit and then come down
                 tf.summary.scalar('kl_divergence', kl, step=policy_train_step)
                 # This should slowly decrease overtime
-                tf.summary.scalar('entropy', entropy_value, step=policy_train_step)
+                tf.summary.scalar('entropy', tf.reduce_mean(entropy_value), step=policy_train_step)
                 policy_train_step += 1
 
                 if kl > 1.5 * target_kl:
                     # Early Stopping
+                    early_stop = True
                     break
+            else:
+                continue
+            break
 
         # Update the value function
         for _ in range(train_value_iterations):
