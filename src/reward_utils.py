@@ -56,8 +56,11 @@ def get_logp_reward(smi):
 
 
 def get_sa_reward(smi):
-    smi = canonicalize_smile(smi)
-    mol = Chem.MolFromSmiles(smi)
+    try:
+        smi = canonicalize_smile(smi)
+        mol = Chem.MolFromSmiles(smi)
+    except:
+        return 0
     return calculateScore(mol)
 
 

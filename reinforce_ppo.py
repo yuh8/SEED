@@ -5,8 +5,8 @@ from src.env_utils import Env
 from src.data_gen_utils import Buffer
 from src.base_model_utils import (get_actor_model,
                                   get_critic_model,
-                                  get_optimizer)
-from src.misc_utils import (logprobabilities, get_entropy,
+                                  get_optimizer_step_decay)
+from src.misc_utils import (logprobabilities, get_entropy, get_kl_divergence,
                             sample_action, save_model_to_json,
                             create_folder)
 from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
@@ -16,7 +16,7 @@ today = str(date.today())
 steps_per_epoch = 20480
 epochs = 500
 gamma = 0.99
-clip_ratio = 0.2
+clip_ratio = 0.1
 policy_learning_rate = 1e-4
 value_learning_rate = 1e-4
 train_policy_iterations = 2
@@ -24,6 +24,7 @@ train_value_iterations = 2
 lam = 0.97
 target_kl = 0.01
 entropy_weight = 0.01
+kl_weight = 0.01
 
 
 # Initialize the buffer
@@ -32,12 +33,12 @@ buffer = Buffer(steps_per_epoch)
 # Initialize the actor and the critic as keras models
 actor = get_actor_model()
 critic = get_critic_model()
-create_folder("rl_model")
-save_model_to_json(actor, "rl_model/rl_model.json")
+create_folder("rl_model_{}".format(today))
+save_model_to_json(actor, "rl_model_{}/rl_model.json".format(today))
 
 # Initialize the policy and the value function optimizers
-policy_optimizer = get_optimizer(policy_learning_rate)
-value_optimizer = get_optimizer(value_learning_rate)
+policy_optimizer = get_optimizer_step_decay(policy_learning_rate)
+value_optimizer = tf.keras.optimizers.Adam(learning_rate=value_learning_rate)
 
 # logs
 train_log_dir = 'logs_{}/'.format(today)
@@ -67,6 +68,7 @@ def get_value(state):
 def train_policy(observation_buffer,
                  action_buffer,
                  logprobability_buffer,
+                 logits_buffer,
                  advantage_buffer):
 
     with tf.GradientTape() as tape:
@@ -81,19 +83,18 @@ def train_policy(observation_buffer,
             (1 - clip_ratio) * advantage_buffer,
         )
         entropy_value = get_entropy(logits)
+        kl_value = get_kl_divergence(logits, logits_buffer)
+        # maximizing reward and entropy while reducing KL divergence
         policy_loss = -tf.reduce_mean(
             tf.minimum(ratio * advantage_buffer, min_advantage)
             + entropy_weight * entropy_value
+            - kl_weight * kl_value
         )
     policy_grads = tape.gradient(policy_loss, actor.trainable_variables)
     policy_grads, _ = tf.clip_by_global_norm(policy_grads, 0.5)
     policy_optimizer.apply_gradients(zip(policy_grads, actor.trainable_variables))
 
-    kl = tf.reduce_mean(
-        logprobability_buffer
-        - logprobabilities(actor(observation_buffer), action_buffer)
-    )
-    kl = tf.reduce_sum(kl)
+    kl = tf.reduce_mean(kl_value)
     return policy_loss, kl, entropy_value
 
 
@@ -143,7 +144,7 @@ with writer.as_default():
             logprobability_t = logprobabilities(logits, action)
 
             # Store obs, act, rew, v_t, logp_pi_t
-            buffer.store(state, action, reward, value_t, logprobability_t)
+            buffer.store(state, action, reward, value_t, logprobability_t, logits)
 
             # Update the observation
             state = state_new
@@ -171,6 +172,7 @@ with writer.as_default():
             advantage_buffer,
             return_buffer,
             logprobability_buffer,
+            logits_buffer,
         ) = buffer.get()
 
         # Update the policy and implement early stopping using KL divergence
@@ -184,6 +186,7 @@ with writer.as_default():
                     observation_buffer[batch, ...],
                     action_buffer[batch],
                     logprobability_buffer[batch],
+                    logits_buffer[batch],
                     advantage_buffer[batch]
                 )
                 if policy_train_step == 0:
@@ -196,13 +199,13 @@ with writer.as_default():
                 tf.summary.scalar('entropy', tf.reduce_mean(entropy_value), step=policy_train_step)
                 policy_train_step += 1
 
-                if kl > 1.5 * target_kl:
-                    # Early Stopping
-                    early_stop = True
-                    break
-            else:
-                continue
-            break
+            #     if kl > 1.5 * target_kl:
+            #         # Early Stopping
+            #         early_stop = True
+            #         break
+            # else:
+            #     continue
+            # break
 
         # Update the value function
         for _ in range(train_value_iterations):
@@ -223,4 +226,5 @@ with writer.as_default():
             f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
         )
         if mean_return > max_mean_return:
-            actor.save_weights("./rl_model/weights/")
+            max_mean_return = mean_return
+            actor.save_weights("./rl_model_{}/weights/".format(today))

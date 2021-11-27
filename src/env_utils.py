@@ -3,8 +3,10 @@ from rdkit import Chem
 from copy import deepcopy
 from .data_process_utils import graph_to_smiles
 from .reward_utils import (get_penalized_logp_reward,
+                           get_sa_reward,
                            get_qed_reward)
-from .CONSTS import (MIN_NUM_ATOMS, QED_WEIGHT, BOND_NAMES,
+from .CONSTS import (MIN_NUM_ATOMS, BOND_NAMES,
+                     QED_WEIGHT, SA_WEIGHT,
                      MAX_NUM_ATOMS,
                      FEATURE_DEPTH,
                      ATOM_MAX_VALENCE,
@@ -99,7 +101,7 @@ class Env:
         smi = graph_to_smiles(self.state[:, :, :-1])
 
         if self.mode == "QED":
-            final_r = QED_WEIGHT * get_qed_reward(smi)
+            final_r = QED_WEIGHT * get_qed_reward(smi)  # + SA_WEIGHT * get_sa_reward(smi) / 10
         else:
             final_r = np.exp(get_penalized_logp_reward(smi) / 4)
 

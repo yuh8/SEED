@@ -63,10 +63,20 @@ def loss_func(y_true, y_pred):
     return loss
 
 
-def get_optimizer(lr):
+def get_optimizer_step_decay(lr):
     lr_fn = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-        [20000, 40000, 60000], [lr, lr / 2, lr / 4, lr / 8],
+        [12000, 18000, 24000], [lr, lr / 5, lr / 10, lr / 15],
         name=None
+    )
+    opt_op = tf.keras.optimizers.Adam(learning_rate=lr_fn)
+    return opt_op
+
+
+def get_optimizer_exponential_decay(lr):
+    lr_fn = tf.keras.optimizers.schedules.ExponentialDecay(
+        lr,
+        decay_steps=200,
+        decay_rate=0.9,
     )
     opt_op = tf.keras.optimizers.Adam(learning_rate=lr_fn)
     return opt_op

@@ -55,6 +55,16 @@ def get_entropy(logits):
     return enty
 
 
+def get_kl_divergence(logits, old_logits):
+    probabilities = tf.nn.softmax(old_logits)
+    logprobabilities = tf.nn.log_softmax(logits)
+    logprobabilities_old = tf.nn.log_softmax(old_logits)
+    kl = tf.reduce_sum(
+        probabilities * (logprobabilities_old - logprobabilities), axis=1
+    )
+    return kl
+
+
 def sample_action(action_logits, state, T=1):
     action_mask = get_action_mask_from_state(state)
     action_logits = np.where(action_mask, -1e9, action_logits)
