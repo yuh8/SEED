@@ -14,16 +14,16 @@ today = str(date.today())
 
 # hyperparameters of PPO
 steps_per_epoch = 20480
-epochs = 500
+epochs = 120
 gamma = 0.99
-clip_ratio = 0.1
+clip_ratio = 0.2
 policy_learning_rate = 1e-4
 value_learning_rate = 1e-4
 train_policy_iterations = 2
 train_value_iterations = 2
 lam = 0.97
 target_kl = 0.01
-entropy_weight = 0.01
+entropy_weight = 0.015
 kl_weight = 0.01
 
 
@@ -37,7 +37,7 @@ create_folder("rl_model_{}".format(today))
 save_model_to_json(actor, "rl_model_{}/rl_model.json".format(today))
 
 # Initialize the policy and the value function optimizers
-policy_optimizer = get_optimizer_step_decay(policy_learning_rate)
+policy_optimizer = tf.keras.optimizers.Adam(learning_rate=policy_learning_rate)
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=value_learning_rate)
 
 # logs

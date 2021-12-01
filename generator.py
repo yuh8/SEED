@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+from rdkit import DataStructs
 from copy import deepcopy
+from functools import partial
+from multiprocessing import Pool, freeze_support
 from src.base_model_utils import SeedGenerator
 from src.data_process_utils import (get_last_col_with_atom, draw_smiles, graph_to_smiles)
 from src.reward_utils import (get_logp_reward, get_sa_reward,
@@ -178,14 +181,43 @@ def compute_novelty_score():
     return novelty_score
 
 
+def _parallel_get_fps(smi):
+    mol = Chem.MolFromSmiles(smi)
+    return Chem.rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 6, 2048)
+
+
+def _parallel_get_dists(fp_new, fps):
+    dist = DataStructs.BulkTanimotoSimilarity(fp_new, fps, returnDistance=True)
+    return np.sum(dist)
+
+
+def compute_diversity(file_A, file_B):
+    smiles_A = pd.read_csv(file_A).Smiles.map(_canonicalize_smiles)
+    smiles_B = pd.read_csv(file_B).Smiles.map(_canonicalize_smiles)
+
+    with Pool() as pool:
+        fps_A = pool.map(_parallel_get_fps, smiles_A)
+
+    with Pool() as pool:
+        fps_B = pool.map(_parallel_get_fps, smiles_B)
+
+    get_dist_fcn = partial(_parallel_get_dists, fps_B)
+
+    with Pool() as pool:
+        dists = pool.map(get_dist_fcn, fps_A)
+
+    return np.sum(dists) / (len(fps_A) * len(fps_B))
+
+
 if __name__ == "__main__":
+    freeze_support()
     create_folder('gen_samples_rl/')
-    model = load_json_model("rl_model/rl_model.json", SeedGenerator, "SeedGenerator")
+    model = load_json_model("rl_model_2021-11-29/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model/weights/")
+    model.load_weights("./rl_model_2021-11-29/weights/")
     gen_samples_df = []
     count = 0
-    for idx in range(10000):
+    for idx in range(100000):
         gen_sample = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)
