@@ -66,6 +66,20 @@ def standardize_smiles(smi):
     return smi
 
 
+def standardize_smiles_error_handle(smi):
+    '''
+    convert smiles to Kekulized form
+    to convert aromatic bond to single/double/triple bond
+    '''
+    try:
+        mol = Chem.MolFromSmiles(smi)
+        Chem.Kekulize(mol, clearAromaticFlags=True)
+        smi = Chem.MolToSmiles(mol, isomericSmiles=False)
+    except:
+        return np.nan
+    return smi
+
+
 def standardize_smiles_to_mol(smi):
     '''
     remove aromatic bonds in mol object
