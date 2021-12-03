@@ -144,7 +144,8 @@ def generate_smiles(model, gen_idx):
     smi_graph = state[..., :-1]
     smi = graph_to_smiles(smi_graph)
     smi = _canonicalize_smiles(smi)
-    draw_smiles(smi, "gen_samples_rl/gen_sample_{}".format(gen_idx))
+    if not isinstance(smi, str):
+        return None
     return smi, num_atoms
 
 
@@ -182,18 +183,20 @@ def compute_novelty_score():
 
 
 def _parallel_get_fps(smi):
-    mol = Chem.MolFromSmiles(smi)
-    return Chem.rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 6, 2048)
+    smi = _canonicalize_smiles(smi)
+    if isinstance(smi, str):
+        mol = Chem.MolFromSmiles(smi)
+        return Chem.rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 6, 2048)
 
 
 def _parallel_get_dists(fp_new, fps):
-    dist = DataStructs.BulkTanimotoSimilarity(fp_new, fps, returnDistance=True)
+    dist = DataStructs.BulkTanimotoSimilarity(fp_new, fps)
     return np.sum(dist)
 
 
 def compute_diversity(file_A, file_B):
     smiles_A = pd.read_csv(file_A).Smiles.map(_canonicalize_smiles)
-    smiles_B = pd.read_csv(file_B).Smiles.map(_canonicalize_smiles)
+    smiles_B = pd.read_csv(file_B).Smiles.values[:1000000]
 
     with Pool() as pool:
         fps_A = pool.map(_parallel_get_fps, smiles_A)
@@ -201,23 +204,26 @@ def compute_diversity(file_A, file_B):
     with Pool() as pool:
         fps_B = pool.map(_parallel_get_fps, smiles_B)
 
-    get_dist_fcn = partial(_parallel_get_dists, fps_B)
+    fps_A = list(filter(None, fps_A))
+    fps_B = list(filter(None, fps_B))
 
-    with Pool() as pool:
-        dists = pool.map(get_dist_fcn, fps_A)
+    sims = []
+    for fp in fps_A:
+        simi = _parallel_get_dists(fp, fps_B)
+        sims.append(simi)
 
-    return np.sum(dists) / (len(fps_A) * len(fps_B))
+    return np.sum(sims) / (len(fps_A) * len(fps_B))
 
 
 if __name__ == "__main__":
     freeze_support()
     create_folder('gen_samples_rl/')
-    model = load_json_model("rl_model_2021-11-29/rl_model.json", SeedGenerator, "SeedGenerator")
+    model = load_json_model("rl_model_2021-12-02/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model_2021-11-29/weights/")
+    model.load_weights("./rl_model_2021-12-02/weights/")
     gen_samples_df = []
     count = 0
-    for idx in range(100000):
+    for idx in range(10000):
         gen_sample = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)
@@ -236,7 +242,11 @@ if __name__ == "__main__":
         print("validation rate = {}".format(np.round(count / (idx + 1), 3)))
 
     gen_samples_df = pd.DataFrame(gen_samples_df)
+    gen_samples_df.sort_values(by=['qed'], inplace=True, ascending=False)
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
+    ext_div = compute_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
+    int_div = compute_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
+    print('external diversity = {0} and internal diversity = {1}'.format(ext_div, int_div))
     # compute_unique_score()
     # compute_novelty_score()
     breakpoint()

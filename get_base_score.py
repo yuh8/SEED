@@ -4,7 +4,7 @@ from src.reward_utils import (get_logp_reward, get_sa_reward,
                               get_qed_reward, get_cycle_reward)
 
 
-df_base = pd.read_csv("D:/seed_data/small_mol_db.csv", sep=';', low_memory=False)
+df_base = pd.read_csv("D:/seed_data/generator/train_data/df_train.csv", low_memory=False)[:1000000]
 gen_samples_df = []
 count = 0
 for _, row in df_base.iterrows():
