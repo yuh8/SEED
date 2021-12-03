@@ -247,7 +247,7 @@ if __name__ == "__main__":
     model.load_weights("./rl_model_2021-12-02/weights/")
     gen_samples_df = []
     count = 0
-    for idx in range(10000):
+    for idx in range(100000):
         gen_sample = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)

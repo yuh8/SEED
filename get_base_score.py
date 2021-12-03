@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from src.data_process_utils import standardize_smiles_error_handle
 from src.reward_utils import (get_logp_reward, get_sa_reward,
                               get_qed_reward, get_cycle_reward)
 
@@ -10,11 +11,12 @@ count = 0
 for _, row in df_base.iterrows():
     gen_sample = {}
     try:
-        gen_sample["Smiles"] = row.Smiles
-        gen_sample['logp'] = np.round(get_logp_reward(row.Smiles), 4)
-        gen_sample['sa'] = np.round(get_sa_reward(row.Smiles), 4)
-        gen_sample['cycle'] = get_cycle_reward(row.Smiles)
-        gen_sample['qed'] = np.round(get_qed_reward(row.Smiles), 4)
+        smi = standardize_smiles_error_handle(row.Smiles)
+        gen_sample["Smiles"] = smi
+        gen_sample['logp'] = np.round(get_logp_reward(smi), 4)
+        gen_sample['sa'] = np.round(get_sa_reward(smi), 4)
+        gen_sample['cycle'] = get_cycle_reward(smi)
+        gen_sample['qed'] = np.round(get_qed_reward(smi), 4)
     except:
         continue
     gen_samples_df.append(gen_sample)
