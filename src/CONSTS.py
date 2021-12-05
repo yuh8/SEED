@@ -2,6 +2,7 @@ from rdkit import Chem
 
 
 MAX_NUM_ATOMS = 41
+MAX_GEN_ATOMS = 30
 
 ATOM_FREQ_DICT = {'C': 35467421, 'N': 5330638, 'O': 5173387, 'F': 709638, 'S': 665573,
                   'Cl': 443265, 'Br': 87847, 'P': 27831, 'I': 13015,

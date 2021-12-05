@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pandas as pd
 from rdkit import Chem
@@ -5,14 +6,19 @@ from rdkit import DataStructs
 from copy import deepcopy
 from multiprocessing import Pool, freeze_support
 from src.base_model_utils import SeedGenerator
-from src.data_process_utils import (get_last_col_with_atom, graph_to_smiles, standardize_smiles_error_handle)
+from src.data_process_utils import (get_last_col_with_atom,
+                                    draw_smiles,
+                                    graph_to_smiles,
+                                    standardize_smiles_error_handle)
 from src.reward_utils import (get_logp_reward, get_sa_reward,
                               get_qed_reward, get_cycle_reward)
 from src.misc_utils import create_folder, load_json_model, sample_action
-from src.CONSTS import (BOND_NAMES, MAX_NUM_ATOMS,
+from src.CONSTS import (BOND_NAMES, MAX_NUM_ATOMS, MAX_GEN_ATOMS,
                         MIN_NUM_ATOMS, FEATURE_DEPTH,
                         ATOM_MAX_VALENCE,
                         ATOM_LIST, CHARGES)
+np.set_printoptions(linewidth=10000)
+np.set_printoptions(threshold=sys.maxsize)
 
 
 def check_validity(mol):
@@ -129,8 +135,12 @@ def update_state_with_action_validity_check(action_logits, state, num_atoms):
     return state_new, is_terminate
 
 
+def check_symmetric(a, rtol=1e-10, atol=1e-10):
+    return np.allclose(a, a.T, rtol=rtol, atol=atol)
+
+
 def generate_smiles(model, gen_idx):
-    num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
+    num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_GEN_ATOMS)
     state = np.zeros((MAX_NUM_ATOMS, MAX_NUM_ATOMS, FEATURE_DEPTH + 1))
     is_terminate = False
 
@@ -145,6 +155,7 @@ def generate_smiles(model, gen_idx):
     smi = _canonicalize_smiles(smi)
     if not isinstance(smi, str):
         return None
+    draw_smiles(smi, "gen_samples_rl/gen_sample_{}".format(gen_idx))
     return smi, num_atoms
 
 
@@ -242,12 +253,13 @@ def compute_internal_diversity(file_A):
 if __name__ == "__main__":
     freeze_support()
     create_folder('gen_samples_rl/')
-    model = load_json_model("rl_model_2021-12-02/rl_model.json", SeedGenerator, "SeedGenerator")
+    model = load_json_model("rl_model_2021-12-05/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model_2021-12-02/weights/")
+    model.load_weights("./rl_model_2021-12-05/weights/")
     gen_samples_df = []
     count = 0
-    for idx in range(100000):
+    mode = 'qed'
+    for idx in range(100):
         gen_sample = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)
@@ -268,9 +280,10 @@ if __name__ == "__main__":
     gen_samples_df = pd.DataFrame(gen_samples_df)
     gen_samples_df.sort_values(by=['qed'], inplace=True, ascending=False)
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
-    ext_div = compute_external_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
-    int_div = compute_internal_diversity('generated_molecules_rl.csv')
-    print('external diversity = {0} and internal diversity = {1}'.format(ext_div, int_div))
+    if mode == "diversity":
+        ext_div = compute_external_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
+        int_div = compute_internal_diversity('generated_molecules_rl.csv')
+        print('external diversity = {0} and internal diversity = {1}'.format(ext_div, int_div))
     # compute_unique_score()
     # compute_novelty_score()
     breakpoint()

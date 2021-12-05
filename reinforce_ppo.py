@@ -9,7 +9,7 @@ from src.base_model_utils import (get_actor_model,
 from src.misc_utils import (logprobabilities, get_entropy, get_kl_divergence,
                             sample_action, save_model_to_json,
                             create_folder)
-from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_NUM_ATOMS
+from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_GEN_ATOMS
 today = str(date.today())
 
 # hyperparameters of PPO
@@ -118,7 +118,7 @@ def train_value_function(observation_buffer, value_buffer, return_buffer):
 # Training starts here
 episode_return = 0
 episode_length = 0
-num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
+num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_GEN_ATOMS)
 env = Env(num_atoms)
 state = env.reset()
 max_mean_return = -np.inf
@@ -158,7 +158,7 @@ with writer.as_default():
                 sum_length += episode_length
                 num_episodes += 1
                 # Generate molecules with different length
-                num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_NUM_ATOMS)
+                num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_GEN_ATOMS)
                 env = Env(num_atoms)
                 if episode_length > max_episode_len:
                     max_episode_len = episode_length
