@@ -12,7 +12,7 @@ def conv2d_block(X, num_filters, kernel_size, padding='SAME'):
                                  padding=padding,
                                  activation=None,
                                  use_bias=False)(X)
-    out = tf.keras.layers.LayerNormalization(epsilon=1e-6)(out)
+    out = tf.keras.layers.BatchNormalization()(out)
     out = tf.keras.layers.LeakyReLU()(out)
     return out
 

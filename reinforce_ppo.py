@@ -13,7 +13,7 @@ from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_GEN_ATOMS
 today = str(date.today())
 
 # hyperparameters of PPO
-steps_per_epoch = 20480
+steps_per_epoch = 10000
 epochs = 120
 gamma = 0.99
 clip_ratio = 0.2
@@ -23,7 +23,7 @@ train_policy_iterations = 2
 train_value_iterations = 2
 lam = 0.97
 target_kl = 0.01
-entropy_weight = 0.015
+entropy_weight = 0.02
 kl_weight = 0.01
 
 

@@ -5,7 +5,7 @@ from rdkit import Chem
 from rdkit import DataStructs
 from copy import deepcopy
 from multiprocessing import Pool, freeze_support
-from src.base_model_utils import SeedGenerator
+from src.base_model_utils import SeedGenerator, get_metrics, loss_func
 from src.data_process_utils import (get_last_col_with_atom,
                                     draw_smiles,
                                     graph_to_smiles,
@@ -253,9 +253,9 @@ def compute_internal_diversity(file_A):
 if __name__ == "__main__":
     freeze_support()
     create_folder('gen_samples_rl/')
-    model = load_json_model("rl_model_2021-12-05/rl_model.json", SeedGenerator, "SeedGenerator")
+    model = load_json_model("rl_model_2021-12-07/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model_2021-12-05/weights/")
+    model.load_weights("./rl_model_2021-12-07/weights/")
     gen_samples_df = []
     count = 0
     mode = 'qed'
@@ -280,6 +280,7 @@ if __name__ == "__main__":
     gen_samples_df = pd.DataFrame(gen_samples_df)
     gen_samples_df.sort_values(by=['qed'], inplace=True, ascending=False)
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
+    breakpoint()
     if mode == "diversity":
         ext_div = compute_external_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
         int_div = compute_internal_diversity('generated_molecules_rl.csv')
