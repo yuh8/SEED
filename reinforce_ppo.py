@@ -1,11 +1,11 @@
 import numpy as np
 import tensorflow as tf
+from copy import deepcopy
 from datetime import date
 from src.env_utils import Env
 from src.data_gen_utils import Buffer
 from src.base_model_utils import (get_actor_model,
-                                  get_critic_model,
-                                  get_optimizer_step_decay)
+                                  get_critic_model)
 from src.misc_utils import (logprobabilities, get_entropy, get_kl_divergence,
                             sample_action, save_model_to_json,
                             create_folder)
@@ -13,14 +13,14 @@ from src.CONSTS import BATCH_SIZE, MIN_NUM_ATOMS, MAX_GEN_ATOMS
 today = str(date.today())
 
 # hyperparameters of PPO
-steps_per_epoch = 10000
+steps_per_epoch = 20480
 epochs = 120
 gamma = 0.99
 clip_ratio = 0.2
 policy_learning_rate = 1e-4
-value_learning_rate = 1e-4
-train_policy_iterations = 2
-train_value_iterations = 2
+value_learning_rate = 3e-4
+train_policy_iterations = 8
+train_value_iterations = 8
 lam = 0.97
 target_kl = 0.01
 entropy_weight = 0.02
@@ -133,8 +133,10 @@ with writer.as_default():
         max_episode_len = -np.inf
         for t in range(steps_per_epoch):
             # Get the logits, action, and take one step in the environment
-            logits = actor(state[np.newaxis, ...], training=False)
-            value_t = critic(state[np.newaxis, ...], training=False)
+            X_in = deepcopy(state[np.newaxis, ...])
+            X_in[..., -1] /= 8
+            logits = actor(X_in, training=False)
+            value_t = critic(X_in, training=False)
             action = sample_action(logits[0].numpy(), state)
             state_new, done, reward = env.step(action)
             episode_return += reward
@@ -152,7 +154,9 @@ with writer.as_default():
             # Finish trajectory if reached to a terminal state
             terminal = done
             if terminal or (t == steps_per_epoch - 1):
-                last_value = 0 if done else critic(state[np.newaxis, ...], training=False)
+                X_in = deepcopy(state[np.newaxis, ...])
+                X_in[..., -1] /= 8
+                last_value = 0 if done else critic(X_in, training=False)
                 buffer.finish_trajectory(last_value)
                 sum_return += episode_return
                 sum_length += episode_length

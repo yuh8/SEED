@@ -5,7 +5,8 @@ from .embed_utils import conv2d_block, res_block
 from .misc_utils import load_json_model
 from .CONSTS import (ATOM_LIST, CHARGES, BOND_NAMES,
                      MAX_NUM_ATOMS, FEATURE_DEPTH,
-                     NUM_FILTERS, FILTER_SIZE, NUM_RES_BLOCKS)
+                     FILTER_SIZE, NUM_RES_BLOCKS_NEW,
+                     NUM_FILTERS_NEW)
 
 
 def core_model():
@@ -16,28 +17,28 @@ def core_model():
     # X_mask = layers.Input(shape=(num_act_charge_actions + num_loc_bond_actions))
 
     # [BATCH, MAX_NUM_ATOMS, MAX_NUM_ATOMS, NUM_FILTERS]
-    out = conv2d_block(X, NUM_FILTERS, FILTER_SIZE)
+    out = conv2d_block(X, NUM_FILTERS_NEW, FILTER_SIZE)
 
-    # [BATCH, MAX_NUM_ATOMS/16, MAX_NUM_ATOMS/16, NUM_FILTERS]
-    major_block_size = NUM_RES_BLOCKS // 4
+    # [BATCH, MAX_NUM_ATOMS/16, MAX_NUM_ATOMS/16, NUM_FILTERS_NEW]
+    major_block_size = NUM_RES_BLOCKS_NEW // 4
     for _ in range(major_block_size):
-        out = res_block(out, NUM_FILTERS, FILTER_SIZE)
+        out = res_block(out, NUM_FILTERS_NEW, FILTER_SIZE)
     out = layers.MaxPool2D(2, 2)(out)
 
     for _ in range(major_block_size):
-        out = res_block(out, NUM_FILTERS, FILTER_SIZE)
+        out = res_block(out, NUM_FILTERS_NEW, FILTER_SIZE)
     out = layers.MaxPool2D(2, 2)(out)
 
     for _ in range(major_block_size):
-        out = res_block(out, NUM_FILTERS, FILTER_SIZE)
+        out = res_block(out, NUM_FILTERS_NEW, FILTER_SIZE)
     out = layers.MaxPool2D(2, 2)(out)
 
     for _ in range(major_block_size):
-        out = res_block(out, NUM_FILTERS, FILTER_SIZE)
+        out = res_block(out, NUM_FILTERS_NEW, FILTER_SIZE)
     out = layers.MaxPool2D(2, 2)(out)
 
     for _ in range(major_block_size):
-        out = res_block(out, NUM_FILTERS, FILTER_SIZE)
+        out = res_block(out, NUM_FILTERS_NEW, FILTER_SIZE)
     out = layers.MaxPool2D(2, 2)(out)
 
     out = layers.GlobalMaxPooling2D()(out)
@@ -130,7 +131,7 @@ class SeedGenerator(keras.Model):
 
 
 def load_base_model():
-    base_model = load_json_model("base_model/generator_model.json", SeedGenerator, "SeedGenerator")
+    base_model = load_json_model("base_model/generator_model.json")
     base_model.load_weights("./base_model/weights/").expect_partial()
     return base_model
 
