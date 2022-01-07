@@ -17,13 +17,13 @@ steps_per_epoch = 20480
 epochs = 120
 gamma = 0.99
 clip_ratio = 0.2
-policy_learning_rate = 1e-4
-value_learning_rate = 3e-4
-train_policy_iterations = 8
-train_value_iterations = 8
+policy_learning_rate = 1e-6
+value_learning_rate = 1e-5
+train_policy_iterations = 2
+train_value_iterations = 2
 lam = 0.97
-target_kl = 0.01
-entropy_weight = 0.02
+target_kl = 0.1
+entropy_weight = 0.01
 kl_weight = 0.01
 
 
@@ -203,13 +203,13 @@ with writer.as_default():
                 tf.summary.scalar('entropy', tf.reduce_mean(entropy_value), step=policy_train_step)
                 policy_train_step += 1
 
-            #     if kl > 1.5 * target_kl:
-            #         # Early Stopping
-            #         early_stop = True
-            #         break
-            # else:
-            #     continue
-            # break
+                if kl > 1.5 * target_kl:
+                    # Early Stopping
+                    early_stop = True
+                    break
+            else:
+                continue
+            break
 
         # Update the value function
         for _ in range(train_value_iterations):

@@ -71,8 +71,5 @@ def sample_action(action_logits, state, T=1):
     action_probs = softmax(action_logits / T)
     act_vec = get_initial_act_vec()
     action_size = act_vec.shape[0]
-    try:
-        action_idx = np.random.choice(action_size, p=action_probs)
-    except:
-        breakpoint()
+    action_idx = np.random.choice(action_size, p=action_probs)
     return action_idx

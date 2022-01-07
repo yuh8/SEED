@@ -101,7 +101,7 @@ class Env:
         smi = graph_to_smiles(self.state[:, :, :-1])
 
         if self.mode == "QED":
-            final_r = QED_WEIGHT * get_qed_reward(smi) - SA_WEIGHT * get_sa_reward(smi) / 10
+            final_r = QED_WEIGHT * get_qed_reward(smi)  # - SA_WEIGHT * get_sa_reward(smi) / 10
         else:
             final_r = np.exp(get_penalized_logp_reward(smi) / 4)
 

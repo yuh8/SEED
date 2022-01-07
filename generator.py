@@ -155,7 +155,7 @@ def generate_smiles(model, gen_idx):
     smi = _canonicalize_smiles(smi)
     if not isinstance(smi, str):
         return None
-    draw_smiles(smi, "gen_samples_rl/gen_sample_{}".format(gen_idx))
+    # draw_smiles(smi, "gen_samples_rl/gen_sample_{}".format(gen_idx))
     return smi, num_atoms
 
 
@@ -253,13 +253,13 @@ def compute_internal_diversity(file_A):
 if __name__ == "__main__":
     freeze_support()
     create_folder('gen_samples_rl/')
-    model = load_json_model("rl_model_2021-12-07/rl_model.json", SeedGenerator, "SeedGenerator")
+    model = load_json_model("rl_model_2021-12-26/rl_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
-    model.load_weights("./rl_model_2021-12-07/weights/")
+    model.load_weights("./rl_model_2021-12-26/weights/")
     gen_samples_df = []
     count = 0
-    mode = 'qed'
-    for idx in range(100):
+    mode = 'diversity'
+    for idx in range(10000):
         gen_sample = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)
@@ -275,12 +275,16 @@ if __name__ == "__main__":
         gen_sample['qed'] = np.round(get_qed_reward(smi), 4)
         gen_samples_df.append(gen_sample)
         count += 1
-        print("validation rate = {}".format(np.round(count / (idx + 1), 3)))
+        print("validation rate = {0} and QED = {1} and SA = {2}".format(np.round(count / (idx + 1), 3),
+                                                                        get_qed_reward(smi),
+                                                                        get_sa_reward(smi)))
+        # draw_smiles(smi, "gen_samples_rl/gen_sample_good_{}".format(idx))
+        if np.round(get_qed_reward(smi), 4) > 0.92 and np.round(get_sa_reward(smi), 4) <= 3:
+            draw_smiles(smi, "gen_samples_rl/gen_sample_good_{}".format(idx))
 
     gen_samples_df = pd.DataFrame(gen_samples_df)
     gen_samples_df.sort_values(by=['qed'], inplace=True, ascending=False)
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
-    breakpoint()
     if mode == "diversity":
         ext_div = compute_external_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
         int_div = compute_internal_diversity('generated_molecules_rl.csv')
