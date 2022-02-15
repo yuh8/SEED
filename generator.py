@@ -257,10 +257,13 @@ if __name__ == "__main__":
     model.compile(optimizer='Adam')
     model.load_weights("./rl_model_2021-12-26/weights/")
     gen_samples_df = []
+    gen_samples_good_df = []
     count = 0
+    count_good = 0
     mode = 'diversity'
-    for idx in range(10000):
+    for idx in range(100000):
         gen_sample = {}
+        gen_sample_good = {}
         try:
             smi, num_atoms = generate_smiles(model, idx)
         except Exception as e:
@@ -279,16 +282,29 @@ if __name__ == "__main__":
                                                                         get_qed_reward(smi),
                                                                         get_sa_reward(smi)))
         # draw_smiles(smi, "gen_samples_rl/gen_sample_good_{}".format(idx))
-        if np.round(get_qed_reward(smi), 4) > 0.92 and np.round(get_sa_reward(smi), 4) <= 3:
-            draw_smiles(smi, "gen_samples_rl/gen_sample_good_{}".format(idx))
+        if np.round(get_qed_reward(smi), 4) > 0.85 and np.round(get_sa_reward(smi), 4) <= 3.5:
+            gen_sample_good["Smiles"] = smi
+            gen_sample_good["NumAtoms"] = num_atoms
+            gen_sample_good['logp'] = np.round(get_logp_reward(smi), 4)
+            gen_sample_good['sa'] = np.round(get_sa_reward(smi), 4)
+            gen_sample_good['cycle'] = get_cycle_reward(smi)
+            gen_sample_good['qed'] = np.round(get_qed_reward(smi), 4)
+            gen_samples_good_df.append(gen_sample_good)
+            draw_smiles(smi, "gen_samples_rl/gen_sample_good_{}".format(count_good))
+            count_good += 1
+            if len(gen_samples_good_df) >= 5000:
+                break
 
     gen_samples_df = pd.DataFrame(gen_samples_df)
     gen_samples_df.sort_values(by=['qed'], inplace=True, ascending=False)
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
+
+    gen_samples_good_df = pd.DataFrame(gen_samples_good_df)
+    gen_samples_good_df.to_csv('generated_molecules_good_rl.csv', index=False)
     if mode == "diversity":
         ext_div = compute_external_diversity('generated_molecules_rl.csv', 'generated_molecules_chembl.csv')
         int_div = compute_internal_diversity('generated_molecules_rl.csv')
         print('external diversity = {0} and internal diversity = {1}'.format(ext_div, int_div))
-    # compute_unique_score()
-    # compute_novelty_score()
+    compute_unique_score()
+    compute_novelty_score()
     breakpoint()

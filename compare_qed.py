@@ -12,8 +12,7 @@ chembl.loc[:, 'Source'] = 'ChEMBL'
 
 rl.loc[:, 'Source'] = 'SEEM_RL'
 
-breakpoint()
-df_all = pd.concat([base, chembl.sample(n=10000, replace=False), rl])
+df_all = pd.concat([base, chembl.sample(n=100000, replace=False), rl])
 
 df_all.reset_index(drop=True, inplace=True)
 
