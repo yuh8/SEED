@@ -4,6 +4,7 @@ from copy import deepcopy
 from .data_process_utils import graph_to_smiles
 from .reward_utils import (get_penalized_logp_reward,
                            get_sa_reward,
+                           get_sim_reward,
                            get_qed_reward)
 from .CONSTS import (MIN_NUM_ATOMS, BOND_NAMES,
                      QED_WEIGHT, SA_WEIGHT,
@@ -88,10 +89,11 @@ def update_state_with_action(action_idx, state, num_atoms):
 
 
 class Env:
-    def __init__(self, num_atoms, mode='QED'):
+    def __init__(self, num_atoms, ref_smis, mode='QED'):
         self.reset()
         self.num_atoms = num_atoms
         self.mode = mode
+        self.ref_smis = ref_smis
 
     def step(self, action_idx):
         self.state, done, inter_reward = update_state_with_action(action_idx, self.state, self.num_atoms)
@@ -101,7 +103,9 @@ class Env:
         smi = graph_to_smiles(self.state[:, :, :-1])
 
         if self.mode == "QED":
-            final_r = QED_WEIGHT * get_qed_reward(smi)  # - SA_WEIGHT * get_sa_reward(smi) / 10
+            final_r = QED_WEIGHT * get_qed_reward(smi) - SA_WEIGHT * get_sa_reward(smi) / 10
+        elif self.mode == 'Similarity':
+            final_r = get_sim_reward(smi, self.ref_smis)
         else:
             final_r = np.exp(get_penalized_logp_reward(smi) / 4)
 

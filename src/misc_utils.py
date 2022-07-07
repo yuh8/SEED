@@ -7,7 +7,8 @@ from .CONSTS import (ATOM_LIST,
                      CHARGES, BOND_NAMES,
                      MAX_NUM_ATOMS)
 from .data_process_utils import (get_action_mask_from_state,
-                                 get_initial_act_vec)
+                                 get_initial_act_vec,
+                                 get_last_col_with_atom)
 
 
 def create_folder(directory):
@@ -65,8 +66,8 @@ def get_kl_divergence(logits, old_logits):
     return kl
 
 
-def sample_action(action_logits, state, T=1):
-    action_mask = get_action_mask_from_state(state)
+def sample_action(action_logits, state, initial_col=0, forbid_atom_idx=[], must_add_bond_idx=[], T=1):
+    action_mask = get_action_mask_from_state(state, initial_col, forbid_atom_idx=forbid_atom_idx, must_add_bond_idx=must_add_bond_idx)
     action_logits = np.where(action_mask, -1e9, action_logits)
     action_probs = softmax(action_logits / T)
     act_vec = get_initial_act_vec()

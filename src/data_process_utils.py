@@ -96,6 +96,8 @@ def standardize_smiles_to_mol(smi):
 def draw_smiles(smi, file_name):
     mol = Chem.MolFromSmiles(smi)
     Chem.Kekulize(mol, clearAromaticFlags=True)
+    # for atom in mol.GetAtoms():
+    #     atom.SetAtomMapNum(atom.GetIdx())
     Draw.MolToFile(mol, '{}.png'.format(file_name))
 
 
@@ -190,8 +192,8 @@ def act_idx_to_vect(action_idx):
         action_vec[dest_idx] = 1
 
     if loc_act_idx is not None and bond_act_idx is not None:
-        start_idx = len(ATOM_LIST) * len(CHARGES)
-        dest_idx = start_idx + loc_act_idx * len(BOND_NAMES) + bond_act_idx
+        bond_start_idx = len(ATOM_LIST) * len(CHARGES)
+        dest_idx = bond_start_idx + loc_act_idx * len(BOND_NAMES) + bond_act_idx
         action_vec[dest_idx] = 1
     return action_vec
 
@@ -203,12 +205,13 @@ def get_last_col_with_atom(state):
     return col
 
 
-def get_action_mask_from_state(state):
+def get_action_mask_from_state(state, initial_col=0, forbid_atom_idx=[], must_add_bond_idx=[]):
     '''
     indicate masking location with value 1
     '''
     num_act_charge_actions = len(ATOM_LIST) * len(CHARGES)
     action_vec_mask = get_initial_act_vec()
+    bond_start_idx = num_act_charge_actions
 
     # masking all zero bond creation action
     zero_bond_idx = np.arange(num_act_charge_actions,
@@ -221,8 +224,24 @@ def get_action_mask_from_state(state):
     action_vec_mask[num_act_charge_actions + col * len(BOND_NAMES):] = 1
 
     # zero or single atom state allows only atom creation
-    if col == 0:
+    if col == initial_col:
+        action_vec_mask[num_act_charge_actions:] = 1
         return action_vec_mask
+
+    if forbid_atom_idx:
+        for row in forbid_atom_idx:
+            mask_start = bond_start_idx + row * len(BOND_NAMES)
+            mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
+            action_vec_mask[mask_start:mask_end] = 1
+
+        if col in [initial_col + 1, initial_col + 2] and must_add_bond_idx:
+            row = must_add_bond_idx[col - initial_col - 1]
+            if state[row, col].sum() < 3:
+                action_vec_mask = np.ones_like(get_initial_act_vec())
+                mask_start = bond_start_idx + row * len(BOND_NAMES) + 1
+                mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
+                action_vec_mask[mask_start:mask_end] = 0
+                return action_vec_mask
 
     # if no bond has been created for this col,
     # do not allow atom_charge creation
@@ -231,7 +250,6 @@ def get_action_mask_from_state(state):
         action_vec_mask[:num_act_charge_actions] = 1
 
     # scan until the row above the col number
-    start_idx = num_act_charge_actions
     remaining_valence_col = state[col, col, -1]
     for row in range(col):
         remaining_valence_row = state[row, row, -1]
@@ -240,16 +258,16 @@ def get_action_mask_from_state(state):
         cell_has_bond = state[row, col, :-1].sum(-1) == 3
         # if cell has bond, do not allow bond creation
         if cell_has_bond:
-            mask_start = start_idx + row * len(BOND_NAMES)
-            mask_end = start_idx + (row + 1) * len(BOND_NAMES)
+            mask_start = bond_start_idx + row * len(BOND_NAMES)
+            mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
             action_vec_mask[mask_start:mask_end] = 1
             continue
 
         # do not allow creation of bond exceeding minimum remaining valance
         has_invalid_bond = (np.arange(len(BOND_NAMES)) > min_remaining_valence).any()
         if has_invalid_bond:
-            mask_start = int(start_idx + row * len(BOND_NAMES) + min_remaining_valence + 1)
-            mask_end = int(start_idx + (row + 1) * len(BOND_NAMES))
+            mask_start = int(bond_start_idx + row * len(BOND_NAMES) + min_remaining_valence + 1)
+            mask_end = int(bond_start_idx + (row + 1) * len(BOND_NAMES))
             action_vec_mask[mask_start:mask_end] = 1
 
     return action_vec_mask
@@ -264,7 +282,7 @@ def decompose_smi_graph(smi_graph):
     for jj in range(gragh_dim):
         # terminate
         if sum(smi_graph[jj, jj, :]) == 0:
-            return actions, states[:-1]
+            return actions, states
         # adding atom and charge
         atom_act_idx = smi_graph[jj, jj, :len(ATOM_LIST)].argmax()
         charge_act_idx = smi_graph[jj, jj, -len(CHARGES):].argmax()
@@ -293,9 +311,16 @@ def decompose_smi_graph(smi_graph):
                 state[jj, jj, -1] -= bond_act_idx
                 states.append(deepcopy(state))
 
-    return actions, states[:-1]
+    return actions, states
 
 
 if __name__ == "__main__":
-    smi = 'CCC(C(O)C)CN'
+    smi = 'C1=CC(O)=CC=C1'
+    # smi = 'O=C(NC)C1=CC(O)=CC(OC(F)(F)F)=C1'
+    smi = standardize_smiles_error_handle(smi)
+    mol = Chem.MolFromSmiles(smi)
+    breakpoint()
+    elements = [atom.GetSymbol() for atom in mol.GetAtoms()]
+    draw_smiles(smi, 'bind_group_2')
+    breakpoint()
     smiles_to_graph(smi)

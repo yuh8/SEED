@@ -2,10 +2,11 @@ import sys
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 from rdkit import DataStructs
 from copy import deepcopy
 from multiprocessing import Pool, freeze_support
-from src.base_model_utils import SeedGenerator, get_metrics, loss_func
+from src.base_model_utils import SeedGenerator
 from src.data_process_utils import (get_last_col_with_atom,
                                     draw_smiles,
                                     graph_to_smiles,
@@ -168,7 +169,7 @@ def _canonicalize_smiles(smi):
 
 
 def compute_unique_score():
-    gen_samples_df = pd.read_csv("generated_molecules.csv")
+    gen_samples_df = pd.read_csv("generated_molecules_rl.csv")
     gen_samples_df.loc[:, 'CanSmiles'] = gen_samples_df.Smiles.map(_canonicalize_smiles)
     gen_samples_df = gen_samples_df[~gen_samples_df.CanSmiles.isnull()]
     num_uniques = gen_samples_df.CanSmiles.unique().shape[0]
@@ -178,7 +179,7 @@ def compute_unique_score():
 
 
 def compute_novelty_score():
-    gen_samples_df = pd.read_csv("generated_molecules.csv")
+    gen_samples_df = pd.read_csv("generated_molecules_rl.csv")
     train_samples_df = pd.read_csv('D:/seed_data/generator/train_data/df_train.csv')
     gen_samples_df.loc[:, 'CanSmiles'] = gen_samples_df.Smiles.map(_canonicalize_smiles)
     train_samples_df.loc[:, 'CanSmiles'] = train_samples_df.Smiles.map(_canonicalize_smiles)
@@ -196,7 +197,7 @@ def _parallel_get_fps(smi):
     smi = _canonicalize_smiles(smi)
     if isinstance(smi, str):
         mol = Chem.MolFromSmiles(smi)
-        return Chem.rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 6, 2048)
+        return rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 6, 2048)
 
 
 def _parallel_get_int_dists(fp_new, fps):
@@ -261,7 +262,7 @@ if __name__ == "__main__":
     count = 0
     count_good = 0
     mode = 'diversity'
-    for idx in range(100000):
+    for idx in range(10000):
         gen_sample = {}
         gen_sample_good = {}
         try:

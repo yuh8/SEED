@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import networkx as nx
 import scipy.signal
@@ -5,6 +6,8 @@ from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.Chem import AllChem
 from rdkit.Chem.Descriptors import qed, MolLogP
+from rdkit.Chem import rdMolDescriptors
+from rdkit import DataStructs
 from .sascorer import calculateScore
 
 
@@ -71,6 +74,46 @@ def get_qed_reward(smi):
     except:
         return 0
     return qed(mol)
+
+
+def _canonicalize_smiles(smi):
+    try:
+        smi = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    except:
+        return np.nan
+    return smi
+
+
+def _parallel_get_fps(smi):
+    smi = _canonicalize_smiles(smi)
+    if isinstance(smi, str):
+        mol = Chem.MolFromSmiles(smi)
+        return rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, 2, 2048)
+
+
+def _parallel_get_int_dists(fp_new, fps):
+    dist = DataStructs.BulkTanimotoSimilarity(fp_new, fps)
+    return np.sum(dist)
+
+
+def _parallel_get_ext_dists(fp_new, fps):
+    sm = DataStructs.BulkTanimotoSimilarity(fp_new, fps)
+    return np.max(sm), np.argmax(sm)
+
+
+def get_sim_reward(smi, ref_list):
+    fp = _parallel_get_fps(smi)
+    ref_fps = [_parallel_get_fps(smi) for smi in ref_list]
+
+    sim = _parallel_get_ext_dists(fp, ref_fps)
+    if sim >= 0.6 and sim <= 0.8:
+        return 1
+
+    if sim < 0.6:
+        return sim / 0.6
+
+    if sim > 0.8:
+        return 0.8 / sim
 
 
 def get_diversity_reward(smi):

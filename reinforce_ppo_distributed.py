@@ -1,10 +1,13 @@
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from datetime import date
+from copy import deepcopy
 from src.env_utils import Env
 from src.data_gen_utils import Buffer
 from src.base_model_utils import (get_actor_model,
                                   get_critic_model)
+from src.data_process_utils import standardize_smiles_error_handle
 from src.misc_utils import (logprobabilities, get_entropy, get_kl_divergence,
                             sample_action, save_model_to_json,
                             create_folder)
@@ -77,7 +80,9 @@ def train_policy(input):
      advantage_buffer) = input
 
     with tf.GradientTape() as tape:
-        logits = actor(observation_buffer, training=True)
+        X_in = deepcopy(observation_buffer)
+        X_in[..., -1] /= 8
+        logits = actor(X_in, training=True)
         ratio = tf.exp(
             logprobabilities(logits, action_buffer)
             - logprobability_buffer
@@ -107,7 +112,9 @@ def train_policy(input):
 def train_value_function(input):
     observation_buffer, value_buffer, return_buffer = input
     with tf.GradientTape() as tape:
-        vpred = critic(observation_buffer, training=True)
+        X_in = deepcopy(observation_buffer)
+        X_in[..., -1] /= 8
+        vpred = critic(X_in, training=True)
         vpredclipped = value_buffer + tf.clip_by_value(vpred - value_buffer, -clip_ratio, clip_ratio)
         # Unclipped value
         vf_losses1 = tf.square(vpred - return_buffer)
@@ -141,10 +148,11 @@ def distributed_train_value(iter):
 
 
 # Training starts here
+ref_smis = pd.read_csv('data/headers.csv').smiles.apply(standardize_smiles_error_handle).values.tolist()
 episode_return = 0
 episode_length = 0
 num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_GEN_ATOMS)
-env = Env(num_atoms)
+env = Env(num_atoms, ref_smis, mode='Similarity')
 state = env.reset()
 max_mean_return = -np.inf
 policy_train_step = 0
@@ -158,8 +166,10 @@ with writer.as_default():
         max_episode_len = -np.inf
         for t in range(steps_per_epoch):
             # Get the logits, action, and take one step in the environment
-            logits = actor(state[np.newaxis, ...], training=False)
-            value_t = critic(state[np.newaxis, ...], training=False)
+            X_in = deepcopy(state[np.newaxis, ...])
+            X_in[..., -1] /= 8
+            logits = actor(X_in, training=False)
+            value_t = critic(X_in, training=False)
             action = sample_action(logits[0].numpy(), state)
             state_new, done, reward = env.step(action)
             episode_return += reward
@@ -184,7 +194,7 @@ with writer.as_default():
                 num_episodes += 1
                 # Generate molecules with different length
                 num_atoms = np.random.randint(MIN_NUM_ATOMS, MAX_GEN_ATOMS)
-                env = Env(num_atoms)
+                env = Env(num_atoms, ref_smis)
                 if episode_length > max_episode_len:
                     max_episode_len = episode_length
                 state, episode_return, episode_length = env.reset(), 0, 0
@@ -288,4 +298,4 @@ with writer.as_default():
         )
         if mean_return > max_mean_return:
             max_mean_return = mean_return
-            actor.save_weights("./rl_model_{}/weights/".format(today))
+            actor.save_weights(f"./rl_model_{today}/weights/")
