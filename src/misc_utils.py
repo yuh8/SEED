@@ -66,7 +66,7 @@ def get_kl_divergence(logits, old_logits):
     return kl
 
 
-def sample_action(action_logits, state, initial_col=0, forbid_atom_idx=[], must_add_bond_idx=[], T=1):
+def sample_action(action_logits, state, initial_col=0, forbid_atom_idx=[], must_add_bond_idx=[], T=2):
     action_mask = get_action_mask_from_state(state, initial_col, forbid_atom_idx=forbid_atom_idx, must_add_bond_idx=must_add_bond_idx)
     action_logits = np.where(action_mask, -1e9, action_logits)
     action_probs = softmax(action_logits / T)

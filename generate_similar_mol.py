@@ -5,6 +5,7 @@ from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 from rdkit import DataStructs
 from rdkit.Chem.Descriptors import MolWt
+from rdkit.Chem.rdMolDescriptors import CalcNumAromaticHeterocycles
 from copy import deepcopy
 from multiprocessing import Pool, freeze_support
 from src.base_model_utils import SeedGenerator
@@ -45,7 +46,7 @@ def update_state_with_action(action_logits, state, num_atoms):
     max_remaining_valence = state[:, :, -1].sum(-1).max()
     col = get_last_col_with_atom(state)
     col_has_atom = (state[:, col, :-1].sum(-1) > 0).any()
-    if (max_remaining_valence < 2) and (col > 0):
+    if (max_remaining_valence < 1) and (col > 0):
         is_terminate = True
         return state, is_terminate
 
@@ -95,6 +96,7 @@ def update_state_with_action_validity_check(action_logits, state,
     col = get_last_col_with_atom(state)
     col_has_atom = (state[:, col, :-1].sum(-1) > 0).any()
     if (max_remaining_valence < 1) and (col > 0):
+        print('no valence available')
         is_terminate = True
         return state, is_terminate
 
@@ -105,6 +107,7 @@ def update_state_with_action_validity_check(action_logits, state,
             action_idx = sample_action(action_logits, state, initial_col, forbid_atom_idx, must_add_bond_idx)
         except:
             is_terminate = True
+            state[col, col] = 0
             return state, is_terminate
         state_new = deepcopy(state)
         if action_idx <= num_act_charge_actions:
@@ -151,20 +154,20 @@ def check_symmetric(a, rtol=1e-10, atol=1e-10):
 
 
 def generate_smiles(model, initial_state, min_num_atoms):
-    num_atoms = np.random.randint(min_num_atoms, MAX_GEN_ATOMS)
+    num_atoms = np.random.randint(min_num_atoms, 13)
     # state = np.zeros((MAX_NUM_ATOMS, MAX_NUM_ATOMS, FEATURE_DEPTH + 1))
     state = deepcopy(initial_state)
     initial_col = get_last_col_with_atom(initial_state)
     is_terminate = False
-    forbid_atom_idx = [0, 1, 2, 4, 6]
-    must_add_bond_idx = []
+    # forbid_atom_idx = [0, 1, 2, 4, 6]
+    # must_add_bond_idx = [3, 5]
     # must_add_bond_idx = []
     # forbid_atom_indices = [[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11],
     #                        [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11],
     #                        [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11],
     #                        [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11]]
-    # np.random.shuffle(forbid_atom_indices)
-    # forbid_atom_idx = forbid_atom_indices[0]
+    must_add_bond_idx = []
+    forbid_atom_idx = [0, 2, 3, 4, 5]
 
     while not is_terminate:
         X_in = deepcopy(state[np.newaxis, ...])
@@ -220,7 +223,7 @@ def get_initial_state_from_smiles(smi):
 if __name__ == "__main__":
     freeze_support()
     create_folder('gen_samples_rl/')
-    create_folder('gen_samples_rl_similar_head/')
+    create_folder('gen_samples_rl_similar_binder/')
     model = load_json_model("base_model/generator_model.json", SeedGenerator, "SeedGenerator")
     model.compile(optimizer='Adam')
     model.load_weights("./base_model/weights/")
@@ -229,16 +232,16 @@ if __name__ == "__main__":
     count = 0
     count_good = 0
     mode = 'diversity'
-    # initial_smi = 'C1=NC=CC(C2=CN=CC=C2)=C1'
-    initial_smi = 'C1=CC(O)=CC=C1'
+    initial_smi = 'C1=NC=CC=C1'
+    # initial_smi = 'C1=CC(O)=CC=C1'
     smi = standardize_smiles_error_handle(initial_smi)
-    mol = Chem.MolFromSmiles(initial_smi)
-    min_num_atoms = mol.GetNumAtoms() + 1
-    ref_smiles_df = pd.read_csv('data/headers.csv').smiles.apply(standardize_smiles_error_handle).values.tolist()
+    mol = Chem.MolFromSmiles(smi)
+    min_num_atoms = mol.GetNumAtoms() + 2
+    ref_smiles_df = pd.read_csv('data/binders.csv').smiles.apply(standardize_smiles_error_handle).values.tolist()
     ref_fps = [_parallel_get_fps(smi) for smi in ref_smiles_df]
     initial_state = get_initial_state_from_smiles(initial_smi)
     smis = []
-    for idx in range(10000):
+    for idx in range(1000000):
         gen_sample = {}
         gen_sample_good = {}
         try:
@@ -246,6 +249,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
             continue
+
+        if 's' in smi or 'S' in smi or '[nH]' in smi or '+' in smi or '[O-]' in smi:
+            continue
+
         gen_sample["Smiles"] = smi
         gen_sample["NumAtoms"] = num_atoms
         gen_sample['logp'] = np.round(get_logp_reward(smi), 4)
@@ -264,7 +271,9 @@ if __name__ == "__main__":
         num_rings = rdMolDescriptors.CalcNumRings(mol)
         mol_w = MolWt(mol)
         sim, sim_idx = _parallel_get_ext_dists(fp, ref_fps)
-        if np.round(get_qed_reward(smi), 4) > 0.8 and mol_w < 250:
+        num_ofht_cycles = CalcNumAromaticHeterocycles(mol)
+        if sim > 0.2 and mol_w < 300 and np.round(get_sa_reward(smi), 4) < 4 and num_ofht_cycles > 1:
+            # if sim > 0.2 and mol_w < 250 and np.round(get_sa_reward(smi), 4) < 4:
             if smi in smis:
                 continue
             smis.append(smi)
@@ -278,9 +287,9 @@ if __name__ == "__main__":
             gen_sample_good['mol_weight'] = mol_w
             gen_sample_good['matched'] = sim_idx + 1
             gen_samples_good_df.append(gen_sample_good)
-            draw_smiles(smi, f"gen_samples_rl_similar_head/{smi}")
+            draw_smiles(smi, f"gen_samples_rl_similar_binder/{smi}")
             count_good += 1
-            if len(gen_samples_good_df) >= 100:
+            if len(gen_samples_good_df) >= 1000:
                 break
 
     gen_samples_df = pd.DataFrame(gen_samples_df)
@@ -288,5 +297,5 @@ if __name__ == "__main__":
     gen_samples_df.to_csv('generated_molecules_rl.csv', index=False)
 
     gen_samples_good_df = pd.DataFrame(gen_samples_good_df)
-    gen_samples_good_df.to_csv('generated_molecules_similar_head.csv', index=False)
+    gen_samples_good_df.to_csv('generated_molecules_similar_binder.csv', index=False)
     breakpoint()

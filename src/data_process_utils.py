@@ -205,7 +205,9 @@ def get_last_col_with_atom(state):
     return col
 
 
-def get_action_mask_from_state(state, initial_col=0, forbid_atom_idx=[], must_add_bond_idx=[]):
+def get_action_mask_from_state(state, initial_col=0,
+                               forbid_atom_idx=[],
+                               must_add_bond_idx=[]):
     '''
     indicate masking location with value 1
     '''
@@ -234,14 +236,16 @@ def get_action_mask_from_state(state, initial_col=0, forbid_atom_idx=[], must_ad
             mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
             action_vec_mask[mask_start:mask_end] = 1
 
-        if col in [initial_col + 1, initial_col + 2] and must_add_bond_idx:
-            row = must_add_bond_idx[col - initial_col - 1]
-            if state[row, col].sum() < 3:
-                action_vec_mask = np.ones_like(get_initial_act_vec())
-                mask_start = bond_start_idx + row * len(BOND_NAMES) + 1
-                mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
-                action_vec_mask[mask_start:mask_end] = 0
-                return action_vec_mask
+        num_bonds_to_add = len(must_add_bond_idx)
+
+        if col > initial_col + 1 and col <= initial_col + num_bonds_to_add and must_add_bond_idx:
+            for row in must_add_bond_idx:
+                if state[row, col].sum() < 3 and state[row, col - 1].sum() < 3:
+                    action_vec_mask = np.ones_like(get_initial_act_vec())
+                    mask_start = bond_start_idx + row * len(BOND_NAMES) + 1
+                    mask_end = bond_start_idx + (row + 1) * len(BOND_NAMES)
+                    action_vec_mask[mask_start:mask_end] = 0
+                    return action_vec_mask
 
     # if no bond has been created for this col,
     # do not allow atom_charge creation
